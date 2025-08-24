@@ -1,0 +1,6 @@
+:root { --primary: #87A96B; --bg: #F9F7F4; }
+body { margin:0; background: var(--bg); font-family: 'Source Sans 3', sans-serif; }
+.header { background: linear-gradient(135deg, #87A96B, #9DB380); color:#fff; padding:16px 20px; font-weight:600; }
+.container { max-width: 960px; margin: 0 auto; padding: 20px; }
+.card { background:#fff; border:1px solid #E8E6E3; border-radius:16px; padding:16px; margin-bottom:16px; }
+.button-primary { background: linear-gradient(135deg, #87A96B, #9DB380); color:#fff; border:none; padding:12px 16px; border-radius:10px; font-weight:600; cursor:pointer; }

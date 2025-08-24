@@ -1,0 +1,21 @@
+{
+  "name": "rq-network-monorepo",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*", "wrappers/*", "tests"],
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "lint": "eslint \"apps/**/*.ts*\"",
+    "typecheck": "tsc -b",
+    "test:schema": "node tests/schema/validate-schemas.cjs",
+    "test:golden": "node tests/golden/run-golden.cjs",
+    "check-import-fences": "node scripts/check-imports.cjs",
+    "check-single-app": "node scripts/check-single-app.cjs"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "ajv": "^8.17.1",
+    "eslint": "^9.0.0",
+    "typescript": "^5.5.0"
+  }
+}

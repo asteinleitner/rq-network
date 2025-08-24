@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "questions.schema.json",
+  "type": "object",
+  "required": ["version", "questions"],
+  "properties": {
+    "version": {"type":"string"},
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "prompt", "type"],
+        "properties": {
+          "id": {"type": "string"},
+          "prompt": {"type": "string"},
+          "type": {"enum": ["single_select","multi_select","number","text","boolean","date"]},
+          "options": {"type": "array", "items": {"type":"object","required":["label","value"],"properties":{"label":{"type":"string"},"value":{}}}},
+          "required": {"type": "boolean"},
+          "category": {"type": "string"}
+        }
+      }
+    }
+  }
+}

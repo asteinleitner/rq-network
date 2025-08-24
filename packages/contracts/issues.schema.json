@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "issues.schema.json",
+  "type": "object",
+  "required": ["version", "issues"],
+  "properties": {
+    "version": {"type":"string"},
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["issueId","name","algorithms"],
+        "properties": {
+          "issueId": {"type":"string"},
+          "name": {"type":"string"},
+          "algorithms": {
+            "type":"array",
+            "items": {
+              "type":"object",
+              "required":["kind"],
+              "properties": {
+                "kind": {"enum":["diagnostic","treatment"]},
+                "rules": {"type":"array"},
+                "defaultResult": {"type":"object"},
+                "defaultRecommendations": {"type":"array"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

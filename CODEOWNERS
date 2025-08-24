@@ -1,0 +1,3 @@
+/wrappers/*           @senior-approver
+/packages/*           @senior-approver
+/apps/network-admin/* @app-owner-network-admin

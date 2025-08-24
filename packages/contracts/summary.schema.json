@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "summary.schema.json",
+  "type": "object",
+  "required": ["version","rules","default"],
+  "properties": {
+    "version": {"type":"string"},
+    "rules": {"type":"array"},
+    "default": {"type":"object","required":["summaryLabel","priority"]}
+  }
+}
