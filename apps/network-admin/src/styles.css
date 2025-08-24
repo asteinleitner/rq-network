@@ -1,6 +1,35 @@
-:root { --primary: #87A96B; --bg: #F9F7F4; }
-body { margin:0; background: var(--bg); font-family: 'Source Sans 3', sans-serif; }
-.header { background: linear-gradient(135deg, #87A96B, #9DB380); color:#fff; padding:16px 20px; font-weight:600; }
-.container { max-width: 960px; margin: 0 auto; padding: 20px; }
-.card { background:#fff; border:1px solid #E8E6E3; border-radius:16px; padding:16px; margin-bottom:16px; }
-.button-primary { background: linear-gradient(135deg, #87A96B, #9DB380); color:#fff; border:none; padding:12px 16px; border-radius:10px; font-weight:600; cursor:pointer; }
+:root{
+  --primary-base:#87A96B;--primary-700:#6E8D58;--primary-600:#7EA166;--primary-500:#87A96B;--primary-400:#9DB380;
+  --primary-gradient:linear-gradient(135deg,#87A96B 0%,#9DB380 100%);
+  --bg:#F9F7F4;--panel:#FFF;--ink:#253238;--ink-muted:#5A6B73;--ink-subtle:#7C8A91;
+  --border-light:#E8E6E3;--shadow-primary:rgba(135,169,107,.15);--shadow-light:rgba(135,169,107,.08);--shadow-hover:rgba(135,169,107,.10);
+  --focus:#87A96B33
+}
+*{box-sizing:border-box} html,body,#root{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Source Sans 3',system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,'Apple Color Emoji','Segoe UI Emoji';line-height:1.45;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.header{background:var(--primary-gradient);color:#fff;padding:16px 20px;font-weight:700;letter-spacing:.2px;box-shadow:0 6px 24px var(--shadow-light)}
+.container{max-width:1040px;margin:0 auto;padding:24px}
+.section-title{font-size:18px;font-weight:700;color:var(--ink);margin:0 0 12px}
+.card{background:var(--panel);border:1px solid var(--border-light);border-radius:20px;padding:24px;margin-bottom:16px;box-shadow:0 4px 20px var(--shadow-light)}
+.button-primary{background:var(--primary-gradient);color:#fff;border:none;padding:12px 16px;border-radius:10px;font-weight:700;cursor:pointer;box-shadow:0 4px 10px var(--shadow-primary);transition:transform .06s,box-shadow .15s,opacity .15s}
+.button-primary:hover{transform:translateY(-1px);box-shadow:0 6px 14px var(--shadow-hover)}
+.button-primary:active{transform:translateY(0);opacity:.92}
+.button-primary:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.button-subtle{background:#fff;border:1px solid var(--border-light);color:var(--ink);padding:10px 14px;border-radius:10px;cursor:pointer}
+input[type=text],input[type=number],input[type=email],input[type=date],select,textarea{
+  width:100%;background:#fff;color:var(--ink);border:1px solid var(--border-light);border-radius:12px;padding:10px 12px;font-size:15px;outline:none;
+  box-shadow:0 2px 8px rgba(135,169,107,.03);transition:border-color .15s,box-shadow .15s
+}
+input:focus,select:focus,textarea:focus{border-color:var(--primary-400);box-shadow:0 0 0 4px var(--focus)}
+label{display:block;font-weight:600;color:var(--ink-muted);margin:8px 0 6px}
+.help-text{color:var(--ink-subtle);font-size:13px}
+.card ul{list-style:none;padding:0;margin:0}
+.card li{padding:8px 0;border-bottom:1px dashed var(--border-light)}
+.card li:last-child{border-bottom:0}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;justify-content:center;align-items:center;z-index:9999;animation:fadeIn .2s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.panel{background:var(--panel);border:1px solid var(--border-light);border-radius:20px;width:min(100%,980px);max-height:90vh;overflow:auto;box-shadow:0 10px 30px var(--shadow-light);padding:20px}
+.panel h1,.panel h2,.panel h3{color:var(--ink);margin:0 0 8px;font-weight:700}
+.panel .toolbar{display:flex;gap:8px;margin:12px 0}
+.panel .row{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+@media (max-width:820px){.panel .row{grid-template-columns:1fr}}
