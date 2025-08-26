@@ -1,56 +1,66 @@
-import React from 'react';
-import { api } from './api';
-import FormBuilderPanel from './FormBuilderPanel';
+import React, { useEffect, useState } from "react";
+import Login from "./Login";
+import ConsoleApp from "./ConsoleAppAdapter";
+import { getToken, clearToken, api } from "./auth";
 
 export default function App() {
-  const [networks, setNetworks] = React.useState([] as Awaited<ReturnType<typeof api.listNetworks>>);
-  const [selectedNet, setSelectedNet] = React.useState<string | null>(null);
-  const [practices, setPractices] = React.useState([] as Awaited<ReturnType<typeof api.listPractices>>);
-  const [showBuilder, setShowBuilder] = React.useState(false);
+  const [token, setToken] = useState<string | null>(getToken());
+  const [networks, setNetworks] = useState<any[] | null>(null);
+  const [activeNetworkId, setActiveNetworkId] = useState<string | null>(null);
+  const [error, setError] = useState<string>("");
 
-  React.useEffect(() => { api.listNetworks().then(setNetworks); }, []);
-  React.useEffect(() => { if (selectedNet) api.listPractices(selectedNet).then(setPractices); }, [selectedNet]);
+  // After login, load networks the user can access
+  useEffect(() => {
+    if (!token) return;
+    (async () => {
+      setError("");
+      setNetworks(null);
+      try {
+        const nets = await api("/my/networks");
+        setNetworks(nets);
+        if (nets?.length) setActiveNetworkId(nets[0].id);
+      } catch (e: any) {
+        setError(e.message || "Failed to load networks");
+      }
+    })();
+  }, [token]);
+
+  if (!token) return <Login onLoggedIn={() => setToken(getToken())} />;
+
+  if (error) {
+    return (
+      <div style={{ padding: 16 }}>
+        <div style={{ marginBottom: 8, color: "#b00" }}>Error: {error}</div>
+        <button onClick={() => { clearToken(); setToken(null); }}>Sign out</button>
+      </div>
+    );
+  }
+
+  if (!networks) return <div style={{ padding: 16 }}>Loading your networks…</div>;
+  if (!activeNetworkId) return <div style={{ padding: 16 }}>No networks in your scope.</div>;
 
   return (
-    <>
-      <div className="header">Network Admin</div>
-      <div className="container">
-        <div className="card">
-          <h3>Networks</h3>
-          <ul>
-            {networks.map(n => (
-              <li key={n.id}>
-                <button className="button-primary" onClick={() => setSelectedNet(n.id)}>{n.name}</button>
-              </li>
+    <div style={{ padding: 16, fontFamily: "system-ui" }}>
+      <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        <h1 style={{ margin: 0, fontSize: 20 }}>Network Admin</h1>
+        <label>
+          Active network:&nbsp;
+          <select
+            value={activeNetworkId}
+            onChange={e => setActiveNetworkId(e.target.value)}
+          >
+            {networks.map((n: any) => (
+              <option key={n.id} value={n.id}>{n.name}</option>
             ))}
-          </ul>
+          </select>
+        </label>
+        <div style={{ marginLeft: "auto" }}>
+          <button onClick={() => { clearToken(); setToken(null); }}>Sign out</button>
         </div>
+      </header>
 
-        {selectedNet && (
-          <div className="card">
-            <h3>Practices in Network</h3>
-            <ul>
-              {practices.map(p => (<li key={p.id}>{p.name}</li>))}
-            </ul>
-            <div style={{ marginTop: 12 }}>
-              <button className="button-primary" onClick={() => setShowBuilder(true)}>
-                Embed Form Builder → Publish Bundle
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {showBuilder && (
-        <FormBuilderPanel
-          onClose={() => setShowBuilder(false)}
-          onPublish={(bundleOrConfig) => {
-            console.log('PUBLISHED from Builder:', bundleOrConfig);
-            alert('Bundle received — check the browser console.');
-            setShowBuilder(false);
-          }}
-        />
-      )}
-    </>
+      {/* Pass activeNetworkId into your original console UI */}
+      <ConsoleApp activeNetworkId={activeNetworkId} />
+    </div>
   );
 }

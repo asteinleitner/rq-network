@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Org {
+  id              String     @id @default(cuid())
+  name            String     @unique
+  networks        Network[]
+  bundles         Bundle[]   @relation("OrgBundles")
+  currentBundleId String?
+  draft           Draft?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model Network {
+  id              String     @id @default(cuid())
+  name            String     @unique
+  orgId           String?
+  org             Org?       @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  practices       Practice[]
+  bundles         Bundle[]
+  currentBundleId String?
+  draft           Draft?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model Practice {
+  id          String      @id @default(cuid())
+  name        String
+  networkId   String
+  network     Network     @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  assignments Assignment[]
+}
+
+model Bundle {
+  id              String   @id @default(cuid())
+  // legacy network linkage (kept for compatibility)
+  networkId       String?
+  network         Network? @relation(fields: [networkId], references: [id], onDelete: SetNull)
+
+  // NEW: scope (org|network) + scopeId, and optional parent lineage
+  scope           String?  // 'org' | 'network'
+  scopeId         String?  // Org.id or Network.id depending on scope
+  parentBundleId  String?
+  parent          Bundle?  @relation("BundleParent", fields: [parentBundleId], references: [id])
+  children        Bundle[] @relation("BundleParent")
+
+  // optional org relation (when scope='org')
+  orgId           String?
+  org             Org?     @relation("OrgBundles", fields: [orgId], references: [id], onDelete: SetNull)
+
+  meta            Json
+  data            Json
+  createdAt       DateTime @default(now())
+  assignments     Assignment[]
+}
+
+model Assignment {
+  id         String   @id @default(cuid())
+  practiceId String
+  bundleId   String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  bundle     Bundle   @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@index([practiceId])
+  @@index([bundleId])
+}
+
+model Draft {
+  id         String   @id @default(cuid())
+
+  // legacy network linkage (kept for compatibility)
+  networkId  String?  @unique
+  network    Network? @relation(fields: [networkId], references: [id], onDelete: SetNull)
+
+  // NEW: scope (org|network) + scopeId
+  scope      String?  // 'org' | 'network'
+  scopeId    String?  // Org.id or Network.id
+
+  // optional org linkage
+  orgId      String?  @unique
+  org        Org?     @relation(fields: [orgId], references: [id], onDelete: SetNull)
+
+  data       Json
+  updatedAt  DateTime @updatedAt
+}
+
+/// === Patient-owned, end-to-end encrypted submissions (cloud backup) ===
+
+model Patient {
+  id         String        @id @default(cuid())
+  orgId      String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  careEpisodes CareEpisode[]
+  submissions  Submission[]
+}
+
+model PracticeKey {
+  id           String   @id @default(cuid())
+  practiceId   String
+  practice     Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  publicKeyPem String   // PEM-encoded public key (RSA/ECDSA/X25519)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([practiceId, isActive])
+}
+
+model CareEpisode {
+  id         String   @id @default(cuid())
+  patientId  String
+  practiceId String
+  startAt    DateTime @default(now())
+  endAt      DateTime?
+  createdAt  DateTime @default(now())
+
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, endAt])
+}
+
+model Submission {
+  id         String   @id @default(cuid())
+  patientId  String
+  bundleId   String
+  bundleHash String
+  createdAt  DateTime @default(now())
+  size       Int
+  storageKey String   // for Phase 1 still points to local blob row
+
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  blob       SubmissionBlob?
+  keys       SubmissionKey[]
+
+  @@index([patientId, bundleId, createdAt])
+}
+
+model SubmissionBlob {
+  submissionId String   @id
+  ciphertext   Bytes
+  iv           Bytes
+  tag          Bytes
+
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+}
+
+enum RecipientType {
+  patient
+  practice
+}
+
+model SubmissionKey {
+  id           String        @id @default(cuid())
+  submissionId String
+  recipientType RecipientType
+  recipientId  String        // patientId or practiceId
+  wrappedDEK   Bytes         // DEK encrypted to recipient's key
+  createdAt    DateTime      @default(now())
+
+  submission   Submission    @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, recipientType, recipientId])
+}

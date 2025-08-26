@@ -1,0 +1,296 @@
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import { PrismaClient, RecipientType } from '@prisma/client';
+import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
+import authRoutes from './routes/auth.js';
+
+const fastify = Fastify({ logger: true });
+await fastify.register(cors, { origin: true });
+await fastify.register(authRoutes);
+const prisma = new PrismaClient();
+
+/** ========== PoC auth (headers) ==========
+ * x-patient-id: <patientId>    (patient device)
+ * x-practice-id: <practiceId>  (doctor/practice)
+ * Replace with proper auth later.
+ */
+function getAuth(req: any) {
+  const patientId = req.headers['x-patient-id'] as string | undefined;
+  const practiceId = req.headers['x-practice-id'] as string | undefined;
+  return { patientId, practiceId };
+}
+
+// Health
+fastify.get('/health', async () => ({ ok: true }));
+
+/* ================= ORGS ================= */
+fastify.get('/orgs', async () => prisma.org.findMany({ orderBy: { createdAt: 'asc' } }));
+fastify.get('/orgs/:id/networks', async (req: any) =>
+  prisma.network.findMany({ where: { orgId: req.params.id }, orderBy: { name: 'asc' } })
+);
+
+const PublishSchema = z.object({
+  meta: z.object({
+    title: z.string().default('Untitled'),
+    author: z.string().default('Corporate Admin'),
+    version: z.string().default('1.0.0')
+  }).passthrough(),
+  data: z.object({}).passthrough()
+});
+
+fastify.get('/orgs/:id/draft', async (req:any) =>
+  prisma.draft.findFirst({ where: { OR: [{ orgId: req.params.id }, { AND: [{ scope:'org' }, { scopeId: req.params.id }] }] } })
+);
+fastify.put('/orgs/:id/draft', async (req:any) => {
+  const id = req.params.id; const body = req.body ?? {};
+  const existing = await prisma.draft.findFirst({ where: { OR: [{ orgId: id }, { AND: [{ scope:'org' }, { scopeId: id }] }] } });
+  if (existing) return prisma.draft.update({ where: { id: existing.id }, data: { data: body, scope:'org', scopeId:id, orgId:id } });
+  return prisma.draft.create({ data: { data: body, scope:'org', scopeId:id, orgId:id } });
+});
+fastify.get('/orgs/:id/bundles', async (req:any) =>
+  prisma.bundle.findMany({ where: { OR: [{ orgId: req.params.id }, { AND: [{ scope:'org' }, { scopeId:req.params.id }] }] }, orderBy: { createdAt: 'desc' } })
+);
+const networkId = req.params.id;
+
+// If you have NetPublishSchema, use it. Otherwise validate inline:
+const payload = req.body ?? {};
+if (!payload?.meta || !payload?.data) {
+  return reply.code(400).send({ ok: false, error: 'meta and data are required' });
+}
+
+// 1) Create bundle with only fields your model supports
+const b = await prisma.bundle.create({
+  data: {
+    meta: payload.meta as any,
+    data: payload.data as any,
+  },
+});
+
+// 2) Point the network’s currentBundleId to this new bundle
+await prisma.network.update({
+  where: { id: networkId },
+  data: { currentBundleId: b.id },
+});
+// Publish a bundle at the network level and set it current
+fastify.post('/networks/:id/bundles', async (req: any, reply) => {
+  const networkId = req.params.id;
+  const payload = req.body ?? {};
+
+  // Minimal validation
+  if (!payload?.meta || !payload?.data) {
+    return reply.code(400).send({ ok: false, error: 'meta and data are required' });
+  }
+
+  // Create bundle with only fields your Bundle model actually has
+  const b = await prisma.bundle.create({
+    data: {
+      meta: payload.meta as any,
+      data: payload.data as any,
+    },
+  });
+
+  // Set this as the network's current bundle
+  await prisma.network.update({
+    where: { id: networkId },
+    data: { currentBundleId: b.id },
+  });
+
+  return b;
+});
+
+
+return b;
+fastify.get('/orgs/:id/current', async (req:any) => {
+  const o = await prisma.org.findUnique({ where: { id: req.params.id } });
+  return { currentBundleId: o?.currentBundleId ?? null };
+});
+fastify.put('/orgs/:id/current', async (req:any, reply) => {
+  const id = req.params.id; const { bundleId } = req.body ?? {};
+  if (!bundleId) return reply.code(400).send({ ok:false, error:'bundleId required' });
+  await prisma.org.update({ where: { id }, data: { currentBundleId: bundleId } });
+  return { ok: true };
+});
+
+/* =============== NETWORKS =============== */
+fastify.get('/networks', async () => prisma.network.findMany({ orderBy: { createdAt: 'asc' } }));
+fastify.get('/networks/:id/practices', async (req:any) =>
+  prisma.practice.findMany({ where: { networkId: req.params.id }, orderBy: { name: 'asc' } })
+);
+
+fastify.get('/networks/:id/draft', async (req:any) =>
+  prisma.draft.findFirst({ where: { OR: [{ networkId: req.params.id }, { AND: [{ scope:'network' }, { scopeId: req.params.id }] }] } })
+);
+fastify.put('/networks/:id/draft', async (req:any) => {
+  const id = req.params.id; const body = req.body ?? {};
+  const existing = await prisma.draft.findFirst({ where: { OR: [{ networkId: id }, { AND: [{ scope:'network' }, { scopeId: id }] }] } });
+  if (existing) return prisma.draft.update({ where: { id: existing.id }, data: { data: body, scope:'network', scopeId:id, networkId:id } });
+  return prisma.draft.create({ data: { data: body, scope:'network', scopeId:id, networkId:id } });
+});
+
+const NetPublishSchema = PublishSchema;
+fastify.get('/networks/:id/bundles', async (req:any) =>
+  prisma.bundle.findMany({ where: { OR: [{ networkId: req.params.id }, { AND: [{ scope:'network' }, { scopeId: req.params.id }] }] }, orderBy: { createdAt: 'desc' } })
+);
+
+
+// Single bundle
+fastify.get('/bundles/:bundleId', async (req:any, reply) => {
+  const b = await prisma.bundle.findUnique({ where: { id: req.params.bundleId } });
+  if (!b) return reply.code(404).send({ ok:false, error:'Not found' });
+  return b;
+});
+
+// Current network bundle pointer
+fastify.get('/networks/:id/current', async (req:any) => {
+  const n = await prisma.network.findUnique({ where: { id: req.params.id } });
+  return { currentBundleId: n?.currentBundleId ?? null };
+});
+fastify.put('/networks/:id/current', async (req:any, reply) => {
+  const { bundleId } = req.body ?? {};
+  if (!bundleId) return reply.code(400).send({ ok:false, error:'bundleId required' });
+  await prisma.network.update({ where: { id: req.params.id }, data: { currentBundleId: bundleId } });
+  return { ok: true };
+});
+
+/* ============== ASSIGNMENTS ============= */
+fastify.get('/assignments', async () =>
+  prisma.assignment.findMany({ orderBy: { createdAt: 'desc' } })
+);
+fastify.post('/assignments', async (req:any, reply) => {
+  const { practiceId, bundleId } = req.body ?? {};
+  if (!practiceId || !bundleId) return reply.code(400).send({ ok:false, error:'practiceId and bundleId required' });
+  return prisma.assignment.create({ data: { practiceId, bundleId } });
+});
+
+/* ===== NEW: Practice public key ===== */
+fastify.get('/practices/:practiceId/public-key', async (req:any, reply) => {
+  const key = await prisma.practiceKey.findFirst({
+    where: { practiceId: req.params.practiceId, isActive: true },
+    orderBy: { createdAt: 'desc' }
+  });
+  if (!key) return reply.code(404).send({ ok:false, error:'No active key' });
+  return { practiceId: req.params.practiceId, publicKeyPem: key.publicKeyPem, createdAt: key.createdAt };
+});
+
+/* ===== NEW: Active care episode ===== */
+fastify.get('/patients/:patientId/care-episodes/active', async (req:any) => {
+  const ce = await prisma.careEpisode.findFirst({
+    where: { patientId: req.params.patientId, endAt: null },
+    orderBy: { startAt: 'desc' }
+  });
+  return ce ? { practiceId: ce.practiceId, startedAt: ce.startAt } : { practiceId: null };
+});
+
+/* ===== NEW: Encrypted submissions ===== */
+const PostSubmissionSchema = z.object({
+  bundleId: z.string(),
+  bundleHash: z.string(),
+  createdAt: z.string().datetime().optional(),
+  size: z.number().int().positive(),
+  ciphertext: z.string(), // base64
+  iv: z.string(),         // base64
+  tag: z.string(),        // base64
+  keys: z.array(z.object({
+    recipientType: z.enum(['patient','practice']),
+    recipientId: z.string(),
+    wrappedDEK: z.string() // base64
+  })).min(1)
+});
+
+// Create submission (patient device or background sync)
+fastify.post('/patients/:patientId/submissions', async (req:any, reply) => {
+  const { patientId } = req.params;
+  const { patientId: hdrPatient } = getAuth(req);
+  if (hdrPatient && hdrPatient !== patientId) return reply.code(403).send({ ok:false, error:'patient mismatch' });
+
+  const parsed = PostSubmissionSchema.safeParse(req.body);
+  if (!parsed.success) return reply.code(400).send({ ok:false, error: parsed.error.flatten() });
+
+  // ensure patient exists (idempotent upsert)
+  await prisma.patient.upsert({ where: { id: patientId }, update: {}, create: { id: patientId } });
+
+  const s = await prisma.submission.create({
+    data: {
+      patientId,
+      bundleId: parsed.data.bundleId,
+      bundleHash: parsed.data.bundleHash,
+      size: parsed.data.size,
+      storageKey: 'local:' + randomUUID(),
+      createdAt: parsed.data.createdAt ? new Date(parsed.data.createdAt) : undefined,
+      blob: {
+        create: {
+          ciphertext: Buffer.from(parsed.data.ciphertext, 'base64'),
+          iv: Buffer.from(parsed.data.iv, 'base64'),
+          tag: Buffer.from(parsed.data.tag, 'base64')
+        }
+      },
+      keys: {
+        create: parsed.data.keys.map(k => ({
+          recipientType: k.recipientType as RecipientType,
+          recipientId: k.recipientId,
+          wrappedDEK: Buffer.from(k.wrappedDEK, 'base64')
+        }))
+      }
+    }
+  });
+
+  return { ok: true, id: s.id, createdAt: s.createdAt };
+});
+
+// List submissions (doctor or patient)
+fastify.get('/patients/:patientId/submissions', async (req:any, reply) => {
+  const { patientId } = req.params;
+  const { practiceId, patientId: hdrPatient } = getAuth(req);
+  if (!practiceId && !(hdrPatient && hdrPatient === patientId)) {
+    return reply.code(403).send({ ok:false, error:'auth required' });
+  }
+  const bundleId = (req.query?.bundleId as string | undefined) || undefined;
+  const list = await prisma.submission.findMany({
+    where: { patientId, ...(bundleId ? { bundleId } : {}) },
+    orderBy: { createdAt: 'desc' },
+    select: { id:true, bundleId:true, bundleHash:true, createdAt:true, size:true }
+  });
+  return list;
+});
+
+// Fetch blob + wrapped key (selected for caller)
+fastify.get('/submissions/:id/blob', async (req:any, reply) => {
+  const { practiceId, patientId: hdrPatient } = getAuth(req);
+  const s = await prisma.submission.findUnique({
+    where: { id: req.params.id },
+    include: { blob: true }
+  });
+  if (!s || !s.blob) return reply.code(404).send({ ok:false, error:'Not found' });
+
+  // pick the appropriate wrapped key
+  let keyRow = null as any;
+  if (practiceId) {
+    keyRow = await prisma.submissionKey.findFirst({
+      where: { submissionId: s.id, recipientType: 'practice', recipientId: practiceId }
+    });
+  } else if (hdrPatient) {
+    keyRow = await prisma.submissionKey.findFirst({
+      where: { submissionId: s.id, recipientType: 'patient', recipientId: hdrPatient }
+    });
+  } else {
+    return reply.code(403).send({ ok:false, error:'auth required' });
+  }
+  if (!keyRow) return reply.code(403).send({ ok:false, error:'no key for caller' });
+
+  return {
+    id: s.id,
+    bundleId: s.bundleId,
+    bundleHash: s.bundleHash,
+    createdAt: s.createdAt,
+    ciphertext: s.blob.ciphertext.toString('base64'),
+    iv: s.blob.iv.toString('base64'),
+    tag: s.blob.tag.toString('base64'),
+    wrappedDEK: keyRow.wrappedDEK.toString('base64')
+  };
+});
+
+const PORT = Number(process.env.PORT || 8787);
+fastify.listen({ port: PORT, host: '127.0.0.1' }).then(() => {
+  fastify.log.info(`API on http://127.0.0.1:${PORT}`);
+});
